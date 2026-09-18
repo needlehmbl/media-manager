@@ -40,9 +40,15 @@ export default function Library() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {items.map((it) => (
           <button key={it.id} onClick={() => setSelected(it)} className="overflow-hidden rounded border border-gray-800 bg-gray-900 text-left hover:border-gray-600">
-            <div className="aspect-video bg-black flex items-center justify-center">
+            <div className="aspect-video bg-black flex items-center justify-center overflow-hidden">
               {it.thumbnail_path ? (
-                <span className="text-xs text-gray-500 px-2">thumb: {it.thumbnail_path.split("/").slice(-1)}</span>
+                <img
+                  src={api.library.thumbUrl(it.thumbnail_path)}
+                  alt={it.title}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
               ) : (
                 <span className="text-3xl">🎬</span>
               )}
@@ -64,7 +70,12 @@ export default function Library() {
               <button onClick={() => setSelected(null)} className="rounded bg-gray-800 px-2 py-1 text-sm">Close</button>
             </div>
             {isVideo(selected.file_path) && (
-              <video controls src={api.fileUrl(selected.file_path)} className="w-full rounded bg-black" />
+              <video
+                controls
+                src={api.fileUrl(selected.file_path)}
+                poster={selected.thumbnail_path ? api.library.thumbUrl(selected.thumbnail_path) : undefined}
+                className="w-full rounded bg-black"
+              />
             )}
             <div className="mt-2 text-xs text-gray-400 break-all">{selected.file_path}</div>
             <div className="mt-1 text-xs text-gray-500">tags: {selected.tags || "—"}</div>

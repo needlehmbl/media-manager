@@ -6,8 +6,10 @@ most video sites.
 
 import asyncio
 import json
+import logging
 import re
 import shutil
+from collections import deque
 from pathlib import Path
 
 from app.config import (
@@ -20,6 +22,9 @@ from app.config import (
 PROGRESS_RE = re.compile(r"\[download\]\s+(?P<pct>\d+(?:\.\d+)?)%")
 DEST_RE = re.compile(r"\[download\] Destination:\s(?P<path>.+)")
 MERGE_RE = re.compile(r"\[Merger\] Merging formats into \"(?P<path>.+)\"")
+
+logger = logging.getLogger(__name__)
+TAIL_LINES = 30
 
 
 def resolve_base(destination: str | None) -> Path:
@@ -71,6 +76,11 @@ def build_command(url: str, base: Path, is_playlist: bool, playlist_title: str |
         "--retries", "10",
         "--fragment-retries", "10",
         "--concurrent-fragments", "4",
+        # A postprocessor hiccup (thumbnail/subs/chapters) must not fail the
+        # job when the media itself downloaded fine — we verify output files
+        # ourselves below. ("--ignore-errors" = postprocessing errors still
+        # count the download as successful.)
+        "--ignore-errors",
         "--no-mtime",
         "--embed-metadata",
         "--embed-thumbnail",
@@ -80,8 +90,12 @@ def build_command(url: str, base: Path, is_playlist: bool, playlist_title: str |
         "--restrict-filenames",
         "-o", out_tmpl,
     ]
-    if shutil.which(FFMPEG_BIN):
-        cmd += ["--ffmpeg-location", FFMPEG_BIN]
+    ffmpeg_path = shutil.which(FFMPEG_BIN)
+    if ffmpeg_path:
+        # Must be the resolved absolute path: yt-dlp treats a bare name as a
+        # relative path and then reports "ffmpeg not found", which breaks
+        # merging and every embed postprocessor (exit code 1 at 100%).
+        cmd += ["--ffmpeg-location", ffmpeg_path]
     if YTDLP_COOKIES_FROM_BROWSER:
         cmd += ["--cookies-from-browser", YTDLP_COOKIES_FROM_BROWSER]
     cmd.append(url)
@@ -105,6 +119,7 @@ async def run_download(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
     )
     outputs: list[Path] = []
+    tail: deque[str] = deque(maxlen=TAIL_LINES)
 
     async def _watch_cancel():
         if cancel_event is None:
@@ -124,6 +139,7 @@ async def run_download(
             if not line:
                 break
             text = line.decode("utf-8", "replace").strip()
+            tail.append(text)
             m = PROGRESS_RE.search(text)
             if m and progress_cb:
                 try:
@@ -142,8 +158,14 @@ async def run_download(
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError()
 
+    tail_text = "\n".join(tail)[-2000:]
+
     if proc.returncode != 0:
-        raise RuntimeError(f"yt-dlp exited with code {proc.returncode} for {url}")
+        # yt-dlp only reaches this on hard failures now (--ignore-errors
+        # absorbs postprocessing hiccups). Include its own last words so the
+        # Job error actually says what happened.
+        logger.warning("yt-dlp exited %s for %s:\n%s", proc.returncode, url, tail_text)
+        raise RuntimeError(f"yt-dlp exited with code {proc.returncode} for {url}:\n{tail_text}")
 
     if progress_cb:
         try:
@@ -156,4 +178,10 @@ async def run_download(
     new_files = sorted(after - before)
     # Prefer explicitly captured paths, else discovered ones.
     existing = [p for p in outputs if p.exists()]
-    return existing or [p for p in new_files if p.suffix.lower() not in {".part", ".tmp", ".ytdl"}]
+    found = existing or [p for p in new_files if p.suffix.lower() not in {".part", ".tmp", ".ytdl"}]
+    if not found:
+        # Everything was skipped/failed (e.g. unavailable video): don't
+        # report success with no files.
+        logger.warning("yt-dlp produced no files for %s:\n%s", url, tail_text)
+        raise RuntimeError(f"yt-dlp finished without producing any files for {url}:\n{tail_text}")
+    return found

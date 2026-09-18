@@ -72,6 +72,7 @@ export const api = {
       req<LibraryItem[]>(`/library${q || source ? `?${new URLSearchParams({ ...(q ? { q } : {}), ...(source ? { source } : {}) })}` : ""}`),
     remove: (id: number, deleteFile = false) =>
       req(`/library/${id}${deleteFile ? "?delete_file=true" : ""}`, { method: "DELETE" }),
+    thumbUrl: (absPath: string) => `${BASE}/thumbs/${encodeURIComponent(absPath.split("/").pop() || "")}`,
   },
   channels: {
     list: () => req<Channel[]>(`/channels`),

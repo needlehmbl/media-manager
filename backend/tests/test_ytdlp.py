@@ -26,6 +26,7 @@ def test_build_command_playlist_folder(tmp_path):
     assert "--yes-playlist" in cmd
     assert "--continue" in cmd
     assert "--embed-metadata" in cmd
+    assert "--ignore-errors" in cmd
 
 
 def test_build_command_single(tmp_path):
@@ -33,3 +34,12 @@ def test_build_command_single(tmp_path):
     o_idx = cmd.index("-o") + 1
     assert "%(title)s" in cmd[o_idx]
     assert "--concurrent-fragments" in cmd
+
+
+def test_build_command_ffmpeg_location_is_absolute(tmp_path, monkeypatch):
+    import app.scrapers.ytdlp_runner as r
+
+    monkeypatch.setattr(r.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+    cmd = build_command("https://example.com/v", tmp_path, False, None)
+    loc = cmd[cmd.index("--ffmpeg-location") + 1]
+    assert loc == "/usr/bin/ffmpeg"

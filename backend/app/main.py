@@ -291,3 +291,4 @@ try:
 except OSError:
     pass
 app.mount("/files", StaticFiles(directory=str(DOWNLOAD_DIR), html=False, check_dir=False), name="files")
+app.mount("/thumbs", StaticFiles(directory=str(THUMBS_DIR), html=False, check_dir=False), name="thumbs")
