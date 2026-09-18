@@ -40,9 +40,34 @@ uploads, and an API key locks the API for self-hosting.
 
 ## Prerequisites
 
-- **Docker path:** Docker Engine 24+ and Docker Compose v2.
-- **Local-dev path:** Python 3.12+, Node.js 24+, plus `yt-dlp` and `ffmpeg`
-  on `PATH` (backend shells out to both).
+- Python 3.12+, Node.js 24+, plus `yt-dlp` and `ffmpeg` on `PATH` (the
+  backend shells out to both for downloads and thumbnails).
+- Docker path (optional): Docker Engine 24+ and Docker Compose v2 —
+  needs access to the Docker socket, which this machine currently denies.
+
+## Quickstart (recommended: `mm.sh`)
+
+From the repo root (`~/Documents/media-manager`):
+
+```bash
+./mm.sh start    # launch API + web in the background (one-time venv/npm setup)
+./mm.sh status   # check both processes
+./mm.sh stop     # stop both
+./mm.sh restart  # stop, then start
+```
+
+Then open the printed UI address (API health at `<api>/health`).
+
+Port defaults: API `8001` (port `8000` is taken by another service on this
+machine), web `5173`. If a default is busy, `mm.sh` automatically picks the
+next free port and prints the actual addresses — or pin them explicitly:
+
+```bash
+MM_API_PORT=8001 MM_WEB_PORT=5174 ./mm.sh start
+```
+
+Pids/logs live in `.mm/` (gitignored); downloads and the SQLite DB persist in
+`./data/`.
 
 ## Quickstart (Docker)
 
@@ -55,25 +80,24 @@ docker compose up --build
 Downloads and the SQLite DB persist in `./data/` (`DOWNLOAD_DIR=/data/downloads`
 inside the container).
 
-## Local development
+## Local development (manual, without `mm.sh`)
 
 ```bash
 # backend
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-DOWNLOAD_DIR=./data/downloads uvicorn app.main:app --reload --port 8000
-# → http://localhost:8000/health
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements.txt
+DOWNLOAD_DIR=./data/downloads DATABASE_URL=sqlite:///./data/media-manager.db \
+  PYTHONPATH=backend uvicorn app.main:app --reload --port 8001
+# → http://localhost:8001/health
 
 # run tests
 PYTHONPATH=backend pytest backend/tests -q
 
-# frontend
+# frontend (from ./frontend — vite must run with the frontend dir as cwd)
 cd frontend
 npm install
-npm run dev
-# → http://localhost:5173 (talks to http://localhost:8000 by default;
-#    override with VITE_API_URL)
+VITE_API_URL=http://localhost:8001 npm run dev
+# → http://localhost:5173 (override the API address with VITE_API_URL)
 ```
 
 ## Configuration
