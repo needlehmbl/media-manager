@@ -26,6 +26,7 @@ class Job(SQLModel, table=True):
     progress: float = Field(default=0.0)
     output_path: Optional[str] = None
     destination: Optional[str] = Field(default=None, description="user-chosen base dir; defaults to DOWNLOAD_DIR")
+    audio_only: bool = Field(default=False, description="audio-only FLAC download")
     title: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

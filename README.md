@@ -47,7 +47,7 @@ uploads, and an API key locks the API for self-hosting.
 
 ## Quickstart (recommended: `mm.sh`)
 
-From the repo root (`~/Documents/media-manager`):
+From the repo root (`~/Documents/Code/media-manager`):
 
 ```bash
 ./mm.sh start    # launch API + web in the background (one-time venv/npm setup)

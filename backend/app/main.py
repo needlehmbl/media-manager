@@ -52,6 +52,7 @@ class JobCreate(BaseModel):
     urls: list[str] | None = None
     source: str = "yt-dlp"
     destination: str | None = None
+    audio_only: bool = False
 
 
 @app.post("/jobs", dependencies=[Depends(require_api_key)])
@@ -65,7 +66,12 @@ async def create_job(payload: JobCreate, session: Session = Depends(get_session)
         raise HTTPException(400, "Provide url or urls")
     created_ids = []
     for u in urls:
-        job = Job(url=u, source=payload.source or "yt-dlp", destination=payload.destination)
+        job = Job(
+            url=u,
+            source=payload.source or "yt-dlp",
+            destination=payload.destination,
+            audio_only=bool(payload.audio_only),
+        )
         session.add(job)
         session.commit()
         session.refresh(job)

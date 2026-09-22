@@ -17,6 +17,14 @@ def init_db() -> None:
         # jobs) and vice versa — essential with parallel download workers.
         with engine.connect() as conn:
             conn.exec_driver_sql("PRAGMA journal_mode=WAL;")
+            # Lightweight migration: create_all() doesn't add columns to
+            # existing tables, so backfill audio_only for older DBs.
+            try:
+                cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(job)").fetchall()]
+                if "audio_only" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE job ADD COLUMN audio_only BOOLEAN DEFAULT 0 NOT NULL")
+            except Exception:
+                pass
 
 
 def get_session():

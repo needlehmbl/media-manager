@@ -26,6 +26,7 @@ export interface Job {
   progress: number;
   output_path?: string | null;
   destination?: string | null;
+  audio_only?: boolean;
   title?: string | null;
   created_at: string;
   error?: string | null;
@@ -61,7 +62,7 @@ export const api = {
   },
   jobs: {
     list: (status?: string) => req<Job[]>(`/jobs${status ? `?status=${status}` : ""}`),
-    create: (payload: { url?: string; urls?: string[]; source: string; destination?: string }) =>
+    create: (payload: { url?: string; urls?: string[]; source: string; destination?: string; audio_only?: boolean }) =>
       req<Job | Job[]>(`/jobs`, { method: "POST", body: JSON.stringify(payload) }),
     retry: (id: number) => req<Job>(`/jobs/${id}/retry`, { method: "POST" }),
     cancel: (id: number) => req(`/jobs/${id}/cancel`, { method: "POST" }),

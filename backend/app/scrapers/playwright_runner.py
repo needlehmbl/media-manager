@@ -17,5 +17,6 @@ async def run_doodstream(
     destination: str | None,
     progress_cb=None,
     cancel_event: asyncio.Event | None = None,
+    audio_only: bool = False,
 ) -> list[Path]:
-    return await run_download(url, destination, progress_cb, cancel_event)
+    return await run_download(url, destination, progress_cb, cancel_event, audio_only)

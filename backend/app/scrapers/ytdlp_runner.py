@@ -22,6 +22,7 @@ from app.config import (
 PROGRESS_RE = re.compile(r"\[download\]\s+(?P<pct>\d+(?:\.\d+)?)%")
 DEST_RE = re.compile(r"\[download\] Destination:\s(?P<path>.+)")
 MERGE_RE = re.compile(r"\[Merger\] Merging formats into \"(?P<path>.+)\"")
+EXTRACT_RE = re.compile(r"\[ExtractAudio\] Destination:\s(?P<path>.+)")
 
 logger = logging.getLogger(__name__)
 TAIL_LINES = 30
@@ -60,36 +61,70 @@ async def probe_entries(url: str) -> tuple[bool, str | None, int]:
         return False, None, 0
 
 
-def build_command(url: str, base: Path, is_playlist: bool, playlist_title: str | None) -> list[str]:
+def build_command(
+    url: str,
+    base: Path,
+    is_playlist: bool,
+    playlist_title: str | None,
+    audio_only: bool = False,
+) -> list[str]:
     if is_playlist and playlist_title:
         # Playlist -> dedicated folder named after the playlist.
         out_tmpl = str(base / playlist_title / "%(playlist_index)03d - %(title)s.%(ext)s")
     else:
         out_tmpl = str(base / "%(uploader)s" / "%(title)s.%(ext)s")
 
-    cmd = [
-        YTDLP_BIN,
-        "--newline",  # one progress line at a time for parsing
-        "--progress",
-        "--yes-playlist",  # recursive playlist download
-        "--continue",  # resume interrupted downloads
-        "--retries", "10",
-        "--fragment-retries", "10",
-        "--concurrent-fragments", "4",
-        # A postprocessor hiccup (thumbnail/subs/chapters) must not fail the
-        # job when the media itself downloaded fine — we verify output files
-        # ourselves below. ("--ignore-errors" = postprocessing errors still
-        # count the download as successful.)
-        "--ignore-errors",
-        "--no-mtime",
-        "--embed-metadata",
-        "--embed-thumbnail",
-        "--embed-chapters",
-        "--embed-subs",
-        "--sub-langs", "en.*",
-        "--restrict-filenames",
-        "-o", out_tmpl,
-    ]
+    if audio_only:
+        # Mirror download_flac.sh: best audio -> FLAC with cover + metadata.
+        cmd = [
+            YTDLP_BIN,
+            "--newline",
+            "--progress",
+            "--yes-playlist",
+            "--continue",
+            "--retries", "10",
+            "--fragment-retries", "10",
+            "--concurrent-fragments", "4",
+            "--ignore-errors",
+            "--no-mtime",
+            "--extract-audio",
+            "--audio-format", "flac",
+            "--audio-quality", "0",
+            "--embed-thumbnail",
+            "--embed-metadata",
+            "--parse-metadata", "%(title)s:%(meta_title)s",
+            "--parse-metadata", "%(uploader)s:%(meta_artist)s",
+            "--parse-metadata", "%(upload_date>%Y)s:%(meta_date)s",
+            "--parse-metadata", "%(album)s:%(meta_album)s",
+            "--convert-thumbnails", "jpg",
+            "--add-metadata",
+            "--restrict-filenames",
+            "-o", out_tmpl,
+        ]
+    else:
+        cmd = [
+            YTDLP_BIN,
+            "--newline",  # one progress line at a time for parsing
+            "--progress",
+            "--yes-playlist",  # recursive playlist download
+            "--continue",  # resume interrupted downloads
+            "--retries", "10",
+            "--fragment-retries", "10",
+            "--concurrent-fragments", "4",
+            # A postprocessor hiccup (thumbnail/subs/chapters) must not fail the
+            # job when the media itself downloaded fine — we verify output files
+            # ourselves below. ("--ignore-errors" = postprocessing errors still
+            # count the download as successful.)
+            "--ignore-errors",
+            "--no-mtime",
+            "--embed-metadata",
+            "--embed-thumbnail",
+            "--embed-chapters",
+            "--embed-subs",
+            "--sub-langs", "en.*",
+            "--restrict-filenames",
+            "-o", out_tmpl,
+        ]
     ffmpeg_path = shutil.which(FFMPEG_BIN)
     if ffmpeg_path:
         # Must be the resolved absolute path: yt-dlp treats a bare name as a
@@ -107,13 +142,14 @@ async def run_download(
     destination: str | None,
     progress_cb=None,
     cancel_event: asyncio.Event | None = None,
+    audio_only: bool = False,
 ) -> list[Path]:
     """Run yt-dlp, report progress 0-100 via callback, return downloaded files."""
     base = resolve_base(destination)
     before = {p for p in base.rglob("*") if p.is_file()}
 
     is_playlist, playlist_title, _ = await probe_entries(url)
-    cmd = build_command(url, base, is_playlist, playlist_title)
+    cmd = build_command(url, base, is_playlist, playlist_title, audio_only)
 
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
@@ -146,7 +182,7 @@ async def run_download(
                     await progress_cb(min(100.0, max(0.0, float(m.group("pct")))))
                 except Exception:
                     pass
-            for rx in (DEST_RE, MERGE_RE):
+            for rx in (DEST_RE, MERGE_RE, EXTRACT_RE):
                 dm = rx.search(text)
                 if dm:
                     outputs.append(Path(dm.group("path").strip()))
@@ -176,9 +212,19 @@ async def run_download(
     # Fallback: anything new under base counts as output (covers playlists).
     after = {p for p in base.rglob("*") if p.is_file()}
     new_files = sorted(after - before)
+    # Sidecars (thumbnails, metadata, subs) are never library media.
+    SIDECAR_SUFFIXES = {".part", ".tmp", ".ytdl", ".jpg", ".jpeg", ".png", ".webp", ".info.json"}
+    SIDECAR_NAMES = {".vtt", ".srt", ".sub", ".description"}
+    def _is_media(p: Path) -> bool:
+        sfx = p.suffix.lower()
+        if sfx in SIDECAR_SUFFIXES or sfx in SIDECAR_NAMES:
+            return False
+        if "".join(p.suffixes[-2:]).lower() == ".info.json":
+            return False
+        return True
     # Prefer explicitly captured paths, else discovered ones.
-    existing = [p for p in outputs if p.exists()]
-    found = existing or [p for p in new_files if p.suffix.lower() not in {".part", ".tmp", ".ytdl"}]
+    existing = [p for p in outputs if p.exists() and _is_media(p)]
+    found = existing or [p for p in new_files if _is_media(p)]
     if not found:
         # Everything was skipped/failed (e.g. unavailable video): don't
         # report success with no files.

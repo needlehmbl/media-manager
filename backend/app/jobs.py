@@ -41,6 +41,7 @@ async def _run_one(job_id: int):
         if not job or job.status == JobStatus.CANCELLED:
             return
         url, source, dest = job.url, job.source, job.destination
+        audio_only = bool(getattr(job, "audio_only", False))
     cancel = asyncio.Event()
     _cancel_events[job_id] = cancel
     _update(job_id, status=JobStatus.RUNNING, error=None, progress=0.0)
@@ -50,7 +51,7 @@ async def _run_one(job_id: int):
 
     try:
         runner = run_doodstream if source == "doodstream" else run_download
-        files = await runner(url, dest, cb, cancel)
+        files = await runner(url, dest, cb, cancel, audio_only)
         out = str(files[0].parent if len(files) > 1 else files[0]) if files else None
         _update(job_id, status=JobStatus.DONE, progress=100.0, output_path=out)
         with Session(engine) as s2:

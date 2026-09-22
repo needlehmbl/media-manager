@@ -24,6 +24,7 @@ export default function Library() {
   useEffect(() => { load(); }, [load]);
 
   const isVideo = (p: string) => /\.(mp4|mkv|webm|mov|m4v)$/i.test(p);
+  const isAudio = (p: string) => /\.(flac|mp3|ogg|oga|opus|m4a|aac|wav|wma|alac|aiff)$/i.test(p);
 
   return (
     <div className="space-y-4">
@@ -40,17 +41,20 @@ export default function Library() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {items.map((it) => (
           <button key={it.id} onClick={() => setSelected(it)} className="overflow-hidden rounded border border-gray-800 bg-gray-900 text-left hover:border-gray-600">
-            <div className="aspect-video bg-black flex items-center justify-center overflow-hidden">
+            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
               {it.thumbnail_path ? (
                 <img
                   src={api.library.thumbUrl(it.thumbnail_path)}
                   alt={it.title}
                   loading="lazy"
-                  className="h-full w-full object-cover"
+                  className={`h-full w-full ${isAudio(it.file_path) ? "object-contain" : "object-cover"}`}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
-                <span className="text-3xl">🎬</span>
+                <span className="text-3xl">{isAudio(it.file_path) ? "🎧" : "🎬"}</span>
+              )}
+              {isAudio(it.file_path) && (
+                <span className="absolute left-1 top-1 rounded bg-purple-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white">🎧 audio</span>
               )}
             </div>
             <div className="p-2">
@@ -76,6 +80,21 @@ export default function Library() {
                 poster={selected.thumbnail_path ? api.library.thumbUrl(selected.thumbnail_path) : undefined}
                 className="w-full rounded bg-black"
               />
+            )}
+            {isAudio(selected.file_path) && (
+              <div className="overflow-hidden rounded bg-black">
+                {selected.thumbnail_path && (
+                  <img
+                    src={api.library.thumbUrl(selected.thumbnail_path)}
+                    alt={selected.title}
+                    className="mx-auto max-h-72 object-contain"
+                  />
+                )}
+                <audio controls src={api.fileUrl(selected.file_path)} className="w-full" />
+              </div>
+            )}
+            {!isVideo(selected.file_path) && !isAudio(selected.file_path) && (
+              <p className="text-sm text-gray-500">Preview not available for this file type — use Download below.</p>
             )}
             <div className="mt-2 text-xs text-gray-400 break-all">{selected.file_path}</div>
             <div className="mt-1 text-xs text-gray-500">tags: {selected.tags || "—"}</div>

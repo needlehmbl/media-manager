@@ -16,6 +16,7 @@ export default function Queue() {
   const [urls, setUrls] = useState("");
   const [destination, setDestination] = useState("");
   const [source, setSource] = useState("yt-dlp");
+  const [audioOnly, setAudioOnly] = useState(false);
   const [filter, setFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -45,6 +46,7 @@ export default function Queue() {
         urls: lines,
         source,
         destination: destination.trim() || undefined,
+        audio_only: audioOnly,
       });
       setUrls("");
       await load();
@@ -83,6 +85,31 @@ export default function Queue() {
             <option value="yt-dlp">yt-dlp (most sites)</option>
             <option value="doodstream">doodstream</option>
           </select>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={audioOnly}
+            onClick={() => setAudioOnly((v) => !v)}
+            title="Audio only: download audio as FLAC with cover + metadata"
+            className={`flex items-center gap-2 rounded border px-3 py-2 text-sm transition-colors ${
+              audioOnly
+                ? "border-purple-500 bg-purple-600/20 text-purple-200"
+                : "border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-600"
+            }`}
+          >
+            <span
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                audioOnly ? "bg-purple-500" : "bg-gray-700"
+              }`}
+            >
+              <span
+                className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${
+                  audioOnly ? "translate-x-3.5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+            🎧 Audio only · FLAC
+          </button>
           <button disabled={submitting} className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50">
             {submitting ? "Queuing…" : "Add to queue"}
           </button>
@@ -101,7 +128,7 @@ export default function Queue() {
           <tbody>
             {jobs.map((j) => (
               <tr key={j.id} className="border-t border-gray-800">
-                <td className="p-2 max-w-72 truncate text-gray-200" title={j.url}>{j.title || j.url}<div className="text-xs text-gray-500">{j.source}{j.destination ? ` → ${j.destination}` : ""}</div></td>
+                <td className="p-2 max-w-72 truncate text-gray-200" title={j.url}>{j.title || j.url}<div className="text-xs text-gray-500">{j.source}{j.audio_only ? " · 🎧 flac" : ""}{j.destination ? ` → ${j.destination}` : ""}</div></td>
                 <td className="p-2"><span className="rounded bg-gray-800 px-2 py-0.5 text-xs">{j.status}</span>{j.error && <div className="max-w-64 truncate text-xs text-red-400" title={j.error}>{j.error}</div>}</td>
                 <td className="p-2"><div className="h-2 rounded bg-gray-800"><div className={`h-2 rounded ${barColor(j.status)}`} style={{ width: `${j.progress}%` }} /></div><div className="text-xs text-gray-500">{j.progress.toFixed(1)}%</div></td>
                 <td className="p-2 max-w-48 truncate text-xs text-gray-500" title={j.output_path || ""}>{j.output_path || "—"}</td>
