@@ -13,7 +13,6 @@ from collections import deque
 from pathlib import Path
 
 from app.config import (
-    DOWNLOAD_DIR,
     FFMPEG_BIN,
     YTDLP_BIN,
     YTDLP_COOKIES_FROM_BROWSER,
@@ -29,14 +28,9 @@ TAIL_LINES = 30
 
 
 def resolve_base(destination: str | None) -> Path:
-    if destination and destination.strip():
-        p = Path(destination.strip()).expanduser()
-        # Contain relative paths inside DOWNLOAD_DIR; allow absolute paths.
-        base = p if p.is_absolute() else (DOWNLOAD_DIR / p)
-    else:
-        base = DOWNLOAD_DIR
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+    from app.filesystem import resolve_destination
+
+    return resolve_destination(destination)
 
 
 async def probe_entries(url: str) -> tuple[bool, str | None, int]:

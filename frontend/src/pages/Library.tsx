@@ -76,7 +76,7 @@ export default function Library() {
             {isVideo(selected.file_path) && (
               <video
                 controls
-                src={api.fileUrl(selected.file_path)}
+                src={api.fileUrlById(selected.id)}
                 poster={selected.thumbnail_path ? api.library.thumbUrl(selected.thumbnail_path) : undefined}
                 className="w-full rounded bg-black"
               />
@@ -90,7 +90,7 @@ export default function Library() {
                     className="mx-auto max-h-72 object-contain"
                   />
                 )}
-                <audio controls src={api.fileUrl(selected.file_path)} className="w-full" />
+                <audio controls src={api.fileUrlById(selected.id)} className="w-full" />
               </div>
             )}
             {!isVideo(selected.file_path) && !isAudio(selected.file_path) && (
@@ -99,7 +99,7 @@ export default function Library() {
             <div className="mt-2 text-xs text-gray-400 break-all">{selected.file_path}</div>
             <div className="mt-1 text-xs text-gray-500">tags: {selected.tags || "—"}</div>
             <div className="mt-3 flex gap-2">
-              <a href={api.fileUrl(selected.file_path)} download className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white">Download</a>
+              <a href={api.fileUrlById(selected.id)} download className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white">Download</a>
               <button onClick={() => api.library.remove(selected.id).then(() => { setSelected(null); load(); })} className="rounded bg-gray-800 px-3 py-1.5 text-sm text-red-300">Delete record</button>
               <button onClick={() => api.library.remove(selected.id, true).then(() => { setSelected(null); load(); })} className="rounded bg-red-900 px-3 py-1.5 text-sm text-red-200">Delete + file</button>
             </div>

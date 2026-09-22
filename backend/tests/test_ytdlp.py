@@ -4,19 +4,43 @@ from app.scrapers.ytdlp_runner import build_command, resolve_base
 
 
 def test_resolve_base_defaults(tmp_path, monkeypatch):
-    import app.scrapers.ytdlp_runner as r
+    import app.config as cfg
 
-    monkeypatch.setattr(r, "DOWNLOAD_DIR", tmp_path)
+    monkeypatch.setattr(cfg, "DOWNLOAD_DIR", tmp_path)
     base = resolve_base(None)
     assert base == tmp_path
 
 
 def test_resolve_base_relative_contained(tmp_path, monkeypatch):
-    import app.scrapers.ytdlp_runner as r
+    import app.config as cfg
 
-    monkeypatch.setattr(r, "DOWNLOAD_DIR", tmp_path)
+    monkeypatch.setattr(cfg, "DOWNLOAD_DIR", tmp_path)
     base = resolve_base("my-videos")
     assert str(base).startswith(str(tmp_path))
+
+
+def test_resolve_base_absolute_home_allowed(tmp_path, monkeypatch):
+    import app.config as cfg
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(cfg, "HOME_DIR", fake_home)
+    monkeypatch.setattr(cfg, "DOWNLOAD_DIR", tmp_path / "dl")
+    target = fake_home / "Music" / "rips"
+    base = resolve_base(str(target))
+    assert base == target
+    assert target.is_dir()
+
+
+def test_resolve_base_absolute_outside_rejected(tmp_path, monkeypatch):
+    import app.config as cfg
+
+    import pytest
+
+    monkeypatch.setattr(cfg, "HOME_DIR", tmp_path / "home")
+    monkeypatch.setattr(cfg, "DOWNLOAD_DIR", tmp_path / "dl")
+    with pytest.raises(ValueError):
+        resolve_base("/etc/media-manager-evil")
 
 
 def test_build_command_playlist_folder(tmp_path):

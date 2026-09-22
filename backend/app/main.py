@@ -4,13 +4,18 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.auth import require_api_key
 from app.config import DOWNLOAD_DIR, MAX_CONCURRENT_JOBS, THUMBS_DIR
+import app.config as config
 from app.db import engine, get_session, init_db
+from app.filesystem import browse as fs_browse
+from app.filesystem import make_dir as fs_make_dir
+from app.filesystem import resolve_destination
 from app.jobs import enqueue, request_cancel, start_workers
 from app.models import Channel, Job, JobStatus, LibraryItem
 
@@ -64,6 +69,11 @@ async def create_job(payload: JobCreate, session: Session = Depends(get_session)
         urls.append(payload.url.strip())
     if not urls:
         raise HTTPException(400, "Provide url or urls")
+    if payload.destination and payload.destination.strip():
+        try:
+            resolve_destination(payload.destination)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
     created_ids = []
     for u in urls:
         job = Job(
@@ -180,6 +190,45 @@ def delete_library_item(item_id: int, delete_file: bool = False, session: Sessio
     return {"deleted": item_id}
 
 
+@app.get("/library/{item_id}/file", dependencies=[Depends(require_api_key)])
+def get_library_file(item_id: int, session: Session = Depends(get_session)):
+    """Stream the library item's file directly (works for any destination,
+    unlike /files which only serves DOWNLOAD_DIR)."""
+    item = session.get(LibraryItem, item_id)
+    if not item:
+        raise HTTPException(404, "Not found")
+    p = Path(item.file_path)
+    if not p.is_file():
+        raise HTTPException(404, "File no longer exists on disk")
+    return FileResponse(str(p), filename=p.name)
+
+
+# ---------- Filesystem (destination picker) ----------
+
+
+@app.get("/fs/roots", dependencies=[Depends(require_api_key)])
+def fs_roots():
+    return {"home": str(config.HOME_DIR), "download_dir": str(config.DOWNLOAD_DIR)}
+
+
+@app.get("/fs/browse", dependencies=[Depends(require_api_key)])
+def fs_browse_endpoint(path: str | None = None):
+    return fs_browse(path)
+
+
+class MkdirRequest(BaseModel):
+    path: str
+
+
+@app.post("/fs/mkdir", dependencies=[Depends(require_api_key)])
+def fs_mkdir(payload: MkdirRequest):
+    try:
+        created = fs_make_dir(payload.path)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"path": str(created)}
+
+
 # ---------- Channels ----------
 
 
@@ -279,7 +328,8 @@ async def trigger_check(cid: int, session: Session = Depends(get_session)):
 @app.get("/settings", dependencies=[Depends(require_api_key)])
 def get_settings():
     return {
-        "download_dir": str(DOWNLOAD_DIR),
+        "download_dir": str(config.DOWNLOAD_DIR),
+        "home_dir": str(config.HOME_DIR),
         "max_concurrent_jobs": MAX_CONCURRENT_JOBS,
         "auth_enabled": bool(__import__("app.config", fromlist=["API_KEY"]).API_KEY),
     }

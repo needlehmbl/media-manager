@@ -53,13 +53,14 @@ export interface Channel {
 export const api = {
   base: BASE,
   fileUrl: (absPath: string) => {
-    // Map absolute download path to /files served path when possible.
-    // Backend serves DOWNLOAD_DIR at /files; best-effort: use filename.
+    // Legacy mapping for job output_path display. Backend serves
+    // DOWNLOAD_DIR at /files; best-effort: use filename.
     const parts = absPath.split("/");
     const idx = parts.lastIndexOf("downloads");
     const rel = idx >= 0 ? parts.slice(idx + 1).join("/") : parts.slice(-2).join("/");
     return `${BASE}/files/${encodeURI(rel)}`;
   },
+  fileUrlById: (id: number) => `${BASE}/library/${id}/file`,
   jobs: {
     list: (status?: string) => req<Job[]>(`/jobs${status ? `?status=${status}` : ""}`),
     create: (payload: { url?: string; urls?: string[]; source: string; destination?: string; audio_only?: boolean }) =>
@@ -84,5 +85,13 @@ export const api = {
     remove: (id: number) => req(`/channels/${id}`, { method: "DELETE" }),
     check: (id: number) => req(`/channels/${id}/check`, { method: "POST" }),
   },
-  settings: () => req<{ download_dir: string; max_concurrent_jobs: number; auth_enabled: boolean }>(`/settings`),
+  settings: () => req<{ download_dir: string; home_dir: string; max_concurrent_jobs: number; auth_enabled: boolean }>(`/settings`),
+  fs: {
+    roots: () => req<{ home: string; download_dir: string }>(`/fs/roots`),
+    browse: (path?: string) =>
+      req<{ current: string; parent: string | null; home: string; download_dir: string; dirs: { name: string; path: string }[] }>(
+        `/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`
+      ),
+    mkdir: (path: string) => req<{ path: string }>(`/fs/mkdir`, { method: "POST", body: JSON.stringify({ path }) }),
+  },
 };

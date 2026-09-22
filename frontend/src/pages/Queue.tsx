@@ -11,6 +11,84 @@ function barColor(s: string) {
   return "bg-yellow-500";
 }
 
+function DirectoryPicker({ initial, onSelect, onClose }: { initial: string; onSelect: (path: string) => void; onClose: () => void }) {
+  const [browse, setBrowse] = useState<{ current: string; parent: string | null; home: string; download_dir: string; dirs: { name: string; path: string }[] } | null>(null);
+  const [newName, setNewName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const go = useCallback(async (path?: string) => {
+    setError(null);
+    try {
+      setBrowse(await api.fs.browse(path));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  useEffect(() => { go(initial || undefined); }, [go, initial]);
+
+  async function create() {
+    const name = newName.trim().replace(/[/\\]/g, "_");
+    if (!name || !browse) return;
+    setError(null);
+    try {
+      const res = await api.fs.mkdir(`${browse.current.replace(/\/$/, "")}/${name}`);
+      setNewName("");
+      await go(res.path);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-xl overflow-hidden rounded border border-gray-700 bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-gray-800 p-3">
+          <h2 className="font-semibold text-white">Choose download folder</h2>
+          <button onClick={onClose} className="rounded bg-gray-800 px-2 py-1 text-sm hover:bg-gray-700">Close</button>
+        </div>
+        <div className="space-y-3 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <button onClick={() => browse?.parent && go(browse.parent)} disabled={!browse?.parent} className="rounded bg-gray-800 px-2 py-1 disabled:opacity-40 hover:bg-gray-700">↑ Up</button>
+            <button onClick={() => browse && go(browse.home)} className="rounded bg-gray-800 px-2 py-1 hover:bg-gray-700">🏠 Home</button>
+            <button onClick={() => browse && go(browse.download_dir)} className="rounded bg-gray-800 px-2 py-1 hover:bg-gray-700">⬇ Default</button>
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-300" title={browse?.current}>{browse?.current || "…"}</span>
+          </div>
+          <div className="max-h-64 overflow-auto rounded border border-gray-800">
+            {browse?.dirs.map((d) => (
+              <button key={d.path} onClick={() => go(d.path)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-800">
+                <span>📁</span><span className="truncate">{d.name}</span>
+              </button>
+            ))}
+            {browse && !browse.dirs.length && <p className="p-3 text-sm text-gray-500">Empty folder.</p>}
+            {!browse && <p className="p-3 text-sm text-gray-500">Loading…</p>}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); create(); } }}
+              placeholder="New folder name…"
+              className="flex-1 rounded bg-gray-950 p-2 text-sm border border-gray-800 placeholder:text-gray-600"
+            />
+            <button onClick={create} className="rounded bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">+ Create</button>
+          </div>
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="rounded bg-gray-800 px-4 py-2 text-sm hover:bg-gray-700">Cancel</button>
+            <button
+              onClick={() => { if (browse) { onSelect(browse.current); onClose(); } }}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+            >
+              Select this folder
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Queue() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [urls, setUrls] = useState("");
@@ -20,6 +98,8 @@ export default function Queue() {
   const [filter, setFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [defaultDir, setDefaultDir] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -34,6 +114,10 @@ export default function Queue() {
     const t = setInterval(load, 2000);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    api.settings().then((s) => setDefaultDir(s.download_dir)).catch(() => {});
+  }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -78,9 +162,18 @@ export default function Queue() {
           <input
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
-            placeholder="Destination folder (optional, e.g. anime/2026)"
+            placeholder={defaultDir ? `Default: ${defaultDir}` : "Default download folder"}
+            title="Empty = default folder. Relative paths stay inside it; absolute paths may be anywhere in your home directory."
             className="flex-1 min-w-52 rounded bg-gray-950 p-2 text-sm border border-gray-800 placeholder:text-gray-600"
           />
+          <button type="button" onClick={() => setPickerOpen(true)} title="Browse the server filesystem and create folders" className="rounded bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">
+            📂 Browse…
+          </button>
+          {destination && (
+            <button type="button" onClick={() => setDestination("")} title="Reset to default folder" className="rounded bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700">
+              Reset
+            </button>
+          )}
           <select value={source} onChange={(e) => setSource(e.target.value)} className="rounded bg-gray-950 p-2 text-sm border border-gray-800">
             <option value="yt-dlp">yt-dlp (most sites)</option>
             <option value="doodstream">doodstream</option>
@@ -143,6 +236,13 @@ export default function Queue() {
           </tbody>
         </table>
       </div>
+      {pickerOpen && (
+        <DirectoryPicker
+          initial={destination.trim() || defaultDir}
+          onSelect={(p) => setDestination(p)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }

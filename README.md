@@ -14,8 +14,10 @@ uploads, and an API key locks the API for self-hosting.
 - **Playlist recursion** — playlist/channel URLs are probed up front and
   downloaded recursively into `<destination>/<Playlist Title>/` with indexed
   filenames (`001 - Title.ext`).
-- **Per-job destinations** — optional destination folder per submission
-  (relative paths stay inside `DOWNLOAD_DIR`, absolute paths allowed).
+- **Per-job destinations** — pick any folder under your home directory (or a
+  subfolder of the default) via the 📂 Browse picker, which can also create
+  new folders; empty means the default `DOWNLOAD_DIR`. Library playback
+  streams by item id so files outside the default still play.
 - **Metadata baked in** — `--embed-metadata --embed-thumbnail --embed-chapters
   --embed-subs` on every download; filenames restricted to safe ASCII.
 - **Library** — completed downloads are auto-indexed with ffmpeg-grabbed
@@ -123,7 +125,9 @@ Frontend env vars (`frontend/.env`): `VITE_API_URL` (default
   · `GET /jobs/{id}` · `POST /jobs/{id}/retry` · `POST /jobs/{id}/cancel`
   · `DELETE /jobs/{id}`
 - `GET /library[?q=&source=&tag=]` · `GET /library/{id}` ·
+  `GET /library/{id}/file` (playback/download stream) ·
   `DELETE /library/{id}[?delete_file=true]`
+- `GET /fs/roots` · `GET /fs/browse?path=` · `POST /fs/mkdir {path}`
 - `POST /channels` · `GET /channels` · `PATCH /DELETE /channels/{id}` ·
   `POST /channels/{id}/check`
 - `GET /settings` · `GET /files/...` (media playback) · `GET /health`
